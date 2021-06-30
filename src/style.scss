@@ -1,0 +1,45 @@
+@import '~bootstrap/dist/css/bootstrap.min.css';
+
+body {
+  margin: 0;
+  padding: 0;
+}
+
+table th {
+  white-space: nowrap;
+}
+
+table .size {
+  white-space: nowrap;
+
+  svg {
+    margin-left: .2rem;
+  }
+}
+
+#stats {
+  .name {
+    .entrypoint-icon {
+      margin-left: .2rem;
+    }
+  }
+  .file-types {
+    margin-left: .2rem;
+  }
+}
+
+#modules {
+  .name {
+    white-space: nowrap;
+  }
+  .depend-on {
+    white-space: nowrap;
+
+    .used-version {
+      margin-left: .2rem;
+    }
+  }
+  .reasons {
+    white-space: nowrap;
+  }
+}
