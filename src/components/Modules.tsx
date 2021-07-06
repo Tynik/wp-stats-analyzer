@@ -6,6 +6,7 @@ import * as Icon from 'react-bootstrap-icons';
 import { connect } from 'react-redux';
 
 import {
+  isLoader,
   humanSize,
   useQueryParams,
   recognizeModuleName,
@@ -19,7 +20,6 @@ const prepareModules = (lockfile, modules) =>
     let existedModule = _.find(result, { moduleName: moduleNames[0] });
     if (existedModule) {
       existedModule.module.size += module.size;
-      // collapse(filter) nested modules
       if (moduleNames.length > 1) {
         existedModule.countInnerModules++;
       } else {
@@ -36,6 +36,7 @@ const prepareModules = (lockfile, modules) =>
       result.push({
         moduleName: externalModuleName || moduleNames[0],
         isExternal: Boolean(externalModuleName),
+        isLoader: isLoader(module['name']),
         countInnerModules: 0,
         module: _.cloneDeep(module)
       });
@@ -46,16 +47,16 @@ const prepareModules = (lockfile, modules) =>
 const dependOn = (lockfile: Record<string, any>, moduleName: string) =>
   _.orderBy(_.reduce(lockfile, (
     result: any[],
-    moduleVersions: Record<string, any>[],
+    modules: Record<string, any>[],
     dependentModuleName: string
     ) => {
-      moduleVersions.forEach((m) => {
-        if (m.dependencies && m.dependencies[moduleName]) {
+      modules.forEach((module) => {
+        if (module.dependencies && module.dependencies[moduleName]) {
           result.push({
-            version: m.version,
-            versionType: m.version.indexOf('file:') === 0 ? 'file' : 'number',
-            usedVersion: m.dependencies[moduleName],
-            usedVersionType: m.dependencies[moduleName].indexOf('file:') === 0 ? 'file' : 'number',
+            version: module.version,
+            versionType: module.version.indexOf('file:') === 0 ? 'file' : 'number',
+            usedVersion: module.dependencies[moduleName],
+            usedVersionType: module.dependencies[moduleName].indexOf('file:') === 0 ? 'file' : 'number',
             dependentModuleName
           });
         }
@@ -73,6 +74,8 @@ const Modules = (props: ModulesType) => {
 
   const [modules, setModules] = React.useState<Record<string, any>>(null);
   const [searchBy, setSearchBy] = React.useState<string>(null);
+  const [dependOnShowMore, setDependOnShowMore] = React.useState<Record<string, any>>({});
+  const [reasonsShowMore, setReasonsShowMore] = React.useState<Record<string, any>>({});
 
   React.useEffect(() => {
     if (!lockfile || !stats) {
@@ -85,7 +88,6 @@ const Modules = (props: ModulesType) => {
       preparedModules = _.orderBy(preparedModules, (module) =>
         module.module.size, ['desc']
       );
-      console.log(preparedModules);
       setModules(preparedModules);
     } else {
       throw new Error('Chunk cannot be found');
@@ -105,6 +107,22 @@ const Modules = (props: ModulesType) => {
   const onSearch = (e) => {
     setSearchBy(e.target.value);
   };
+
+  const showHideMoreDependOn = (moduleId, e) => {
+    e.preventDefault();
+
+    setDependOnShowMore((dependOnShowMore) => (
+      { ...dependOnShowMore, [moduleId]: !dependOnShowMore[moduleId] }
+    ))
+  }
+
+  const showHideMoreReasons = (moduleId, e) => {
+    e.preventDefault();
+
+    setReasonsShowMore((reasonsShowMore) => (
+      { ...reasonsShowMore, [moduleId]: !reasonsShowMore[moduleId] }
+    ))
+  }
 
   if (!modules) {
     return <Spinner animation="border" variant="primary" role="status"/>;
@@ -129,7 +147,7 @@ const Modules = (props: ModulesType) => {
         </thead>
         <tbody>
         {
-          getFilteredModules().map(({ moduleName, isExternal, countInnerModules, module }, moduleIndex: number) =>
+          getFilteredModules().map(({ moduleName, isLoader, isExternal, countInnerModules, module }, moduleIndex: number) =>
             <tr key={'module-' + moduleIndex}>
               <td className="name">
                 <span>{moduleName}</span>
@@ -143,22 +161,38 @@ const Modules = (props: ModulesType) => {
                     <Icon.ArrowBarLeft/>
                   )
                 }
+                {
+                  isLoader && (
+                    <Icon.Plug/>
+                  )
+                }
               </td>
               <td className="depend-on">
                 {
                   _.map(
-                    dependOn(lockfile, moduleName).slice(0, 3),
+                    dependOnShowMore[module['id']] ? dependOn(lockfile, moduleName) : dependOn(lockfile, moduleName).slice(0, 3),
                     ({ dependentModuleName, version, usedVersion, versionType, usedVersionType }) => (
                       <div key={moduleName + dependentModuleName + version}>
-                        {dependentModuleName}@{versionType === 'file' ? 'FILE' : version}
-                        <Badge className="used-version" variant="primary">{usedVersionType === 'file' ? 'FILE'
-                          : usedVersion}</Badge>
+                        <span>{dependentModuleName}@{versionType === 'file' ? 'FILE' : version}</span>
+                        <Badge className="used-version" variant="primary">
+                          {
+                            usedVersionType === 'file' ? 'FILE' : usedVersion
+                          }
+                        </Badge>
                       </div>
                     )
                   )
                 }
                 {dependOn(lockfile, moduleName).length > 3 && (
-                  <a className="show-more" href="#">Show more ({dependOn(lockfile, moduleName).length - 3})</a>
+                  <a className="show-more" href="#" onClick={(e) => showHideMoreDependOn(module['id'], e)}>
+                    {
+                      dependOnShowMore[module['id']] ? (
+                        <>Hide more</>
+                      ) : (
+                        <>Show more (+{dependOn(lockfile, moduleName).length - 3})</>
+                      )
+                    }
+                  </a>
                 )}
               </td>
               <td className="size">
@@ -173,13 +207,21 @@ const Modules = (props: ModulesType) => {
               </td>
               <td className="reasons">
                 {
-                  _.map(module['reasons'].slice(0, 3), (reason: Record<string, any>, reasonIndex: number) => (
-                    <div key={'reason-' + moduleIndex + '-' + reasonIndex}>{reason['moduleName']}</div>
+                  _.map(reasonsShowMore[module['id']] ? module['reasons'] : module['reasons'].slice(0, 3), (reason: Record<string, any>, reasonIndex: number) => (
+                    <div key={'reason-' + moduleIndex + '-' + reasonIndex}>
+                      <span>{reason['moduleName']}</span>
+                    </div>
                   ))
                 }
                 {module['reasons'].length > 3 && (
-                  <a className="show-more" href="#" onClick={() => {}}>
-                    Show more ({module['reasons'].length - 3})
+                  <a className="show-more" href="#" onClick={(e) => showHideMoreReasons(module['id'], e)}>
+                    {
+                      reasonsShowMore[module['id']] ? (
+                        <>Hide more</>
+                      ) : (
+                        <>Show more (+{module['reasons'].length - 3})</>
+                      )
+                    }
                   </a>
                 )}
               </td>

@@ -79,6 +79,9 @@ export const useQueryParams = (): URLSearchParams  => {
   return new URLSearchParams(useLocation().search);
 }
 
+export const isLoader = (moduleName: string) =>
+  moduleName.indexOf('!') !== -1;
+
 export const isExternalModule = (moduleName: string) =>
   moduleName.indexOf('external ') === 0;
 
